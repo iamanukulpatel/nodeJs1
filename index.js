@@ -3,13 +3,18 @@ import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import OpenAI from "openai";
 import cors from "cors";
+import { readFileSync } from "node:fs";
 dotenv.config(); // Load environment variables from .env file
 
 const app = express();
-// Parse various different custom JSON types as JSON
+
 app.use(bodyParser.json());
 
 app.use(cors());
+
+// Read the JSON file
+const configFile = "assistant.json";
+const configData = JSON.parse(readFileSync(configFile, "utf8"));
 
 const port = process.env.PORT || 4000;
 
@@ -25,7 +30,10 @@ app.post("/chat", async (req, res) => {
   const completion = await openAi.chat.completions.create({
     model: "gpt-4",
     messages: [
-      { role: "system", content: "You are a helpful assistant." },
+      {
+        role: "system",
+        content: `You are ${configData.assistantName} AI. Ask me about ${configData.topic}.`,
+      },
       { role: "user", content: message },
     ],
   });
