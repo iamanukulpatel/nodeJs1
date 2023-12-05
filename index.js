@@ -1,22 +1,40 @@
-const express = require("express");
-require("dotenv").config();
+import express from "express";
+import dotenv from "dotenv";
+import bodyParser from "body-parser";
+import OpenAI from "openai";
+import cors from "cors";
+dotenv.config(); // Load environment variables from .env file
+
 const app = express();
+// Parse various different custom JSON types as JSON
+app.use(bodyParser.json());
 
-app.get("/", (req, res) => {
-  res.send("Hello World");
+app.use(cors());
+
+const port = process.env.PORT || 4000;
+
+const openAi = new OpenAI({ apiKey: process.env.ANUKUL_KEY });
+
+app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+
+  if (!message || typeof message !== "string") {
+    return res.status(400).json({ error: "Invalid message format" });
+  }
+
+  const completion = await openAi.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: message },
+    ],
+  });
+
+  const reply = completion.choices[0].message;
+
+  res.send(reply);
 });
 
-app.get("/twitter", (req, res) => {
-  res.send("Hello form Twitter");
+app.listen(port, () => {
+  console.log(`Listening on http://localhost:${port}`);
 });
-
-app.get("/login", (req, res) => {
-  res.send("<h1>Please login at Twitter</h1>");
-});
-
-app.get("/youtube", (req, res) => {
-  res.send("<h2>AlphaKodePlay</h2>");
-});
-app.listen(process.env.PORT, () =>
-  console.log(`listening on http://localhost:${process.env.PORT}`)
-);
