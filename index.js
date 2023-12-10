@@ -1,46 +1,110 @@
+import OpenAI from "openai";
 import express from "express";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
-import OpenAI from "openai";
 import cors from "cors";
-import { readFileSync } from "node:fs";
-dotenv.config(); // Load environment variables from .env file
 
 const app = express();
 
 app.use(bodyParser.json());
-
+dotenv.config();
 app.use(cors());
-
-// Read the JSON file
-const configFile = "assistant.json";
-const configData = JSON.parse(readFileSync(configFile, "utf8"));
 
 const port = process.env.PORT || 4000;
 
-const openAi = new OpenAI({ apiKey: process.env.ANUKUL_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.ANUKUL_KEY,
+});
 
-app.post("/chat", async (req, res) => {
+let data;
+
+app.post(`/chat`, async (req, res) => {
   const { message } = req.body;
 
-  if (!message || typeof message !== "string") {
-    return res.status(400).json({ error: "Invalid message format" });
-  }
+  // if (!message || typeof message !== "string") {
+  //   return res.send("Invalid message type");
+  // }
 
-  const completion = await openAi.chat.completions.create({
+  // Step 1: Create an Assistant
+  const myAssistant = await openai.beta.assistants.create({
     model: "gpt-4",
-    messages: [
+    instructions:
+      "You are a personal math tutor. When asked a question, write and run Python code to answer the question.",
+    name: "Math Tutor anukul",
+    tools: [
       {
-        role: "system",
-        content: `You are ${configData.assistantName} AI. Ask me about ${configData.topic}.`,
+        type: "code_interpreter",
       },
-      { role: "user", content: message },
     ],
   });
+  console.log("This is the assistant object: ", myAssistant, "\n");
 
-  const reply = completion.choices[0].message;
+  // Step 2: Create a Thread
+  const myThread = await openai.beta.threads.create();
+  console.log("This is the thread object: ", myThread, "\n");
 
-  res.send(reply);
+  let thread_id;
+  let run_id;
+  // Step 3: Add a Message to a Thread
+  const myThreadMessage = await openai.beta.threads.messages.create(
+    (thread_id = myThread.id),
+    {
+      role: "user",
+      content: "hi",
+    }
+  );
+  console.log("This is the message object: ", myThreadMessage, "\n");
+
+  // Step 4: Run the Assistant
+  const myRun = await openai.beta.threads.runs.create(
+    (thread_id = myThread.id),
+    {
+      assistant_id: myAssistant.id,
+      instructions: "Please address the user as Sai.",
+    }
+  );
+  console.log("This is the run object: ", myRun, "\n");
+
+  // Step 5: Periodically retrieve the Run to check on its status to see if it has moved to completed
+  const retrieveRun = async () => {
+    let keepRetrievingRun;
+
+    while (myRun.status !== "completed") {
+      keepRetrievingRun = await openai.beta.threads.runs.retrieve(
+        (thread_id = myThread.id),
+        (run_id = myRun.id)
+      );
+
+      console.log(`Run status: ${keepRetrievingRun.status}`);
+
+      if (keepRetrievingRun.status === "completed") {
+        console.log("\n");
+        break;
+      }
+    }
+  };
+  retrieveRun();
+
+  // Step 6: Retrieve the Messages added by the Assistant to the Thread
+
+  try {
+    const waitForAssistantMessage = async () => {
+      await retrieveRun();
+
+      const allMessages = await openai.beta.threads.messages.list(
+        (thread_id = myThread.id)
+      );
+
+      console.log("User: ", myThreadMessage.content[0].text.value);
+      const reply = allMessages.data[0];
+      console.log(reply);
+      data = reply;
+      res.send(data);
+    };
+    waitForAssistantMessage();
+  } catch (error) {
+    res.send(error);
+  }
 });
 
 app.listen(port, () => {
